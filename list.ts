@@ -10,6 +10,7 @@ const LOG_LENGTHS_ENABLED = true
 const LOG_LENGTHS_INTERVAL = 10 * 1000
 let added: string[] = []
 let pending: string[] = []
+let processing: Set<string> = new Set()
 
 const sleep = (ms: number)=> new Promise((resolve)=>setTimeout(resolve, ms))
 
@@ -58,9 +59,11 @@ async function createListEntry(did: string) {
         })
         //console.log('added ' + did + ' to the list')
         added.push(did)
+        processing.delete(did)
     } catch (err) {
         // add the user back to the list
         pending.push(did)
+        processing.delete(did)
         console.warn(err)
         if (err instanceof XRPCError) {
             onRateLimitHeaders(err.headers)
@@ -88,7 +91,7 @@ async function queueUser(did: string, ignoreChecks: boolean) {
     if (!inited) {
         throw "Not inited!"
     }
-    if (ignoreChecks || (!added.includes(did) && !pending.includes(did))) {
+    if (ignoreChecks || (!added.includes(did) && !pending.includes(did) && pending.length<10000 && !processing.has(did))) {
         pending.push(did)
     }
 }
@@ -96,23 +99,6 @@ async function queueUser(did: string, ignoreChecks: boolean) {
 // return a promise for when it is inited, or true if it is already done
 function isInited() {
     return inited
-}
-
-
-async function writeFile(filepath: string, data: string[]) {
-    let index = 0
-    let fd = fs.openSync(filepath, 'w')
-    let i = 0
-    for (let part of data) {
-        let writing = part
-        if (i<data.length-1) {
-            writing+='\n'
-        }
-        fs.write(fd, writing, index,()=>{})
-        index+=writing.length
-        i++
-    }
-    fs.closeSync(fd)
 }
 
 function syncWriteFile(filepath: string, data: string[]) {
@@ -131,6 +117,44 @@ function syncWriteFile(filepath: string, data: string[]) {
     fs.closeSync(fd)
 }
 
+
+function fileToArr(filename: string): Promise<string[]> {
+    return new Promise((resolve,reject)=>{
+        let readStream = fs.createReadStream(filename);
+        let chunks: string = "";
+        let array: string[] = []
+        // Handle any errors while reading
+        readStream.on('error', err => {
+            // handle error
+
+            // File could not be read
+            return reject(err)
+        });
+
+        // Listen for data
+        readStream.on('data', (chunk: string | Buffer) => {
+            chunk = chunk.toString()
+            chunks = chunks + chunk
+            // try and split it
+            let split = chunks.split('\n')
+            for (let i = 0; i < split.length-1; i++) {
+                // we use chunks.length-1 here because if it's still streaming data in we don't want to consume that piece
+                array.push(split[i])
+            }
+            chunks = split[split.length-1]
+        });
+
+        // File is done being read
+        readStream.on('close', () => {
+            // Create a buffer of the image from the stream
+            for (let chunk in chunks.split('\n')) {
+                array.push(chunk)
+            }
+            return resolve(array)
+        });
+    })
+}
+
 // sync function used on exiting
 function saveStateSync() {
     if (!inited) return
@@ -144,8 +168,8 @@ async function saveState() {
     if (!inited) return
     //await fs.promises.writeFile(PENDING_FILE, Array.from(pending).join('\n'))
     //await fs.promises.writeFile(ADDED_FILE, Array.from(added).join('\n'))
-    writeFile(PENDING_FILE,pending)
-    writeFile(ADDED_FILE,added)
+    syncWriteFile(PENDING_FILE,pending)
+    syncWriteFile(ADDED_FILE,added)
     console.log('saved')
 }
 setInterval(saveState,SAVE_STATE_INTERVAL)
@@ -156,6 +180,7 @@ async function addUsersToList() {
         let did = pending.pop()
         //console.log(did)
         if (did) {
+            processing.add(did)
             await createListEntry(did)
         }
     }
@@ -189,7 +214,8 @@ async function init() {
     console.log("Logged in!")
     //check if pending exists
     if (fs.existsSync(PENDING_FILE)) {
-        pending = (await fs.promises.readFile(PENDING_FILE)).toString().split('\n')
+        //pending = (await fs.promises.readFile(PENDING_FILE)).toString().split('\n')
+        pending = await fileToArr(PENDING_FILE)
     }
 
     if (!fs.existsSync(ADDED_FILE)) {
@@ -200,7 +226,8 @@ async function init() {
             addUsersToList()
         })
     } else {
-        added = (await fs.promises.readFile(ADDED_FILE)).toString().split('\n')
+        //added = (await fs.promises.readFile(ADDED_FILE)).toString().split('\n')
+        added = await fileToArr(ADDED_FILE)
         console.log('loaded list!!')
         inited = true
         addUsersToList()
