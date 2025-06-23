@@ -29,12 +29,13 @@ socket.on('connect', async(connection)=> {
     });
     connection.on('message', async(message)=> {
       try {
-        if (message.type === "utf8" && isRateLimitAllowed() && isInited()) {
+        if (message.type === "utf8" && isInited()) {
           let json = JSON.parse(message.utf8Data)
           if (typeof json?.commit?.record?.subject?.uri == "string" && json?.commit?.collection?.startsWith("app.bsky.feed")) {
             let did = json.commit.record.subject.uri.match(DID_REGEX)
             if (did) {
               did = did[0]
+              //console.log(did)
               queueUser(did)
             }
           }
