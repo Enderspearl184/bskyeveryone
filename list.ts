@@ -10,7 +10,6 @@ const LOG_LENGTHS_ENABLED = true
 const LOG_LENGTHS_INTERVAL = 10 * 1000
 let added: string[] = []
 let pending: string[] = []
-let pendingObj: any = {}
 
 const sleep = (ms: number)=> new Promise((resolve)=>setTimeout(resolve, ms))
 
@@ -62,7 +61,6 @@ async function createListEntry(did: string) {
     } catch (err) {
         // add the user back to the list
         pending.push(did)
-        pendingObj[did]=1
         console.warn(err)
         if (err instanceof XRPCError) {
             onRateLimitHeaders(err.headers)
@@ -86,13 +84,12 @@ async function loadList() {
 }
 
 // queue a user
-async function queueUser(did: string) {
+async function queueUser(did: string, ignoreChecks: boolean) {
     if (!inited) {
         throw "Not inited!"
     }
-    if (!added.includes(did) && !pendingObj[did]) {
+    if (ignoreChecks || (!added.includes(did) && !pending.includes(did))) {
         pending.push(did)
-        pendingObj[did]=1
     }
 }
 
@@ -159,7 +156,6 @@ async function addUsersToList() {
         let did = pending.pop()
         //console.log(did)
         if (did) {
-            delete pendingObj[did]
             await createListEntry(did)
         }
     }
@@ -194,9 +190,6 @@ async function init() {
     //check if pending exists
     if (fs.existsSync(PENDING_FILE)) {
         pending = (await fs.promises.readFile(PENDING_FILE)).toString().split('\n')
-        for (let did of pending) {
-            pendingObj[did]=1
-        }
     }
 
     if (!fs.existsSync(ADDED_FILE)) {

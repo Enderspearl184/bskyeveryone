@@ -36,7 +36,7 @@ socket.on('connect', async(connection)=> {
             if (did) {
               did = did[0]
               //console.log(did)
-              queueUser(did)
+              queueUser(did,false)
             }
           }
         }
@@ -162,6 +162,6 @@ while (!isInited()) {
 
 for (let pds of knownPDS) {
   // only allow https pdses to be loaded
-  fetchPdsDids(pds, async(did:string)=>queueUser(did))
+  fetchPdsDids(pds, async(did:string)=>queueUser(did,true))
 }
 })().catch(console.error);
