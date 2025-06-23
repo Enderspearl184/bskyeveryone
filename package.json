@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@atproto/api": "^0.15.16",
+    "dotenv": "^16.5.0",
+    "websocket": "^1.0.35"
+  },
+  "type": "module"
+}
