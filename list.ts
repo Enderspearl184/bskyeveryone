@@ -5,11 +5,12 @@ import { XRPCError } from "@atproto/xrpc"
 const PENDING_FILE = "./pending.txt"
 const ADDED_FILE = "./added.txt"
 const ADD_INTERVAL = 1 * 60 * 1000
-const SAVE_STATE_INTERVAL = 60 * 60 * 1000
+const SAVE_STATE_INTERVAL = 30* 60 * 1000
 const LOG_LENGTHS_ENABLED = true
-const LOG_LENGTHS_INTERVAL = 30 * 1000
+const LOG_LENGTHS_INTERVAL = 10 * 1000
 let added: string[] = []
 let pending: string[] = []
+let pendingObj: any = {}
 
 const sleep = (ms: number)=> new Promise((resolve)=>setTimeout(resolve, ms))
 
@@ -61,6 +62,7 @@ async function createListEntry(did: string) {
     } catch (err) {
         // add the user back to the list
         pending.push(did)
+        pendingObj[did]=1
         console.warn(err)
         if (err instanceof XRPCError) {
             onRateLimitHeaders(err.headers)
@@ -88,8 +90,10 @@ async function queueUser(did: string) {
     if (!inited) {
         throw "Not inited!"
     }
-    if (!added.includes(did) && !pending.includes(did))
+    if (!added.includes(did) && !pendingObj[did]) {
         pending.push(did)
+        pendingObj[did]=1
+    }
 }
 
 // return a promise for when it is inited, or true if it is already done
@@ -98,16 +102,54 @@ function isInited() {
 }
 
 
+async function writeFile(filepath: string, data: string[]) {
+    let index = 0
+    let fd = fs.openSync(filepath, 'w')
+    let i = 0
+    for (let part of data) {
+        let writing = part
+        if (i<data.length-1) {
+            writing+='\n'
+        }
+        fs.write(fd, writing, index,()=>{})
+        index+=writing.length
+        i++
+    }
+    fs.closeSync(fd)
+}
+
+function syncWriteFile(filepath: string, data: string[]) {
+    let index = 0
+    let i = 0
+    let fd = fs.openSync(filepath, 'w')
+    for (let part of data) {
+        let writing = part
+        if (i<data.length-1) {
+            writing+='\n'
+        }
+        fs.writeSync(fd, writing, index)
+        index+=writing.length
+        i++
+    }
+    fs.closeSync(fd)
+}
+
 // sync function used on exiting
 function saveStateSync() {
-    fs.writeFileSync(PENDING_FILE, pending.join('\n'))
-    fs.writeFileSync(ADDED_FILE, added.join('\n'))
+    if (!inited) return
+    syncWriteFile(PENDING_FILE,pending)
+    syncWriteFile(ADDED_FILE,added)
+    console.log('saved')
 }
 
 // async function used on a timer
 async function saveState() {
-    await fs.promises.writeFile(PENDING_FILE, pending.join('\n'))
-    await fs.promises.writeFile(ADDED_FILE, added.join('\n'))
+    if (!inited) return
+    //await fs.promises.writeFile(PENDING_FILE, Array.from(pending).join('\n'))
+    //await fs.promises.writeFile(ADDED_FILE, Array.from(added).join('\n'))
+    writeFile(PENDING_FILE,pending)
+    writeFile(ADDED_FILE,added)
+    console.log('saved')
 }
 setInterval(saveState,SAVE_STATE_INTERVAL)
 
@@ -117,6 +159,7 @@ async function addUsersToList() {
         let did = pending.pop()
         //console.log(did)
         if (did) {
+            delete pendingObj[did]
             await createListEntry(did)
         }
     }
@@ -151,6 +194,9 @@ async function init() {
     //check if pending exists
     if (fs.existsSync(PENDING_FILE)) {
         pending = (await fs.promises.readFile(PENDING_FILE)).toString().split('\n')
+        for (let did of pending) {
+            pendingObj[did]=1
+        }
     }
 
     if (!fs.existsSync(ADDED_FILE)) {

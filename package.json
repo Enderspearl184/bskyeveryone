@@ -5,6 +5,7 @@
     "@types/node": "^24.0.3",
     "@types/websocket": "^1.0.10",
     "dotenv": "^16.5.0",
+    "undici": "^7.10.0",
     "websocket": "^1.0.35"
   },
   "type": "commonjs"
