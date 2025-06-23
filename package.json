@@ -1,8 +1,11 @@
 {
   "dependencies": {
     "@atproto/api": "^0.15.16",
+    "@atproto/xrpc": "^0.7.0",
+    "@types/node": "^24.0.3",
+    "@types/websocket": "^1.0.10",
     "dotenv": "^16.5.0",
     "websocket": "^1.0.35"
   },
-  "type": "module"
+  "type": "commonjs"
 }
